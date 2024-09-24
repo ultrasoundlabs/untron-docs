@@ -11,7 +11,6 @@ const assetPrefix = isProduction ? "/untron-docs" : "";
 export default withNextra({
   images: {
     unoptimized: true,
-    path: assetPrefix,
   },
   assetPrefix,
   basePath: assetPrefix,
