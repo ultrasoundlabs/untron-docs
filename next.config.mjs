@@ -5,11 +5,14 @@ const withNextra = nextra({
   themeConfig: "./theme.config.jsx",
 });
 
+const isProduction = process.env.NODE_ENV === "production";
+const assetPrefix = isProduction ? "/untron-docs" : "";
+
 export default withNextra({
-  basePath: "/untron-docs",
-  assetPrefix: "/untron-docs/",
   images: {
     unoptimized: true,
   },
+  assetPrefix,
+  basePath: assetPrefix,
   output: "export",
 });

@@ -1,24 +1,33 @@
-name: Deploy to GitHub Pages
+name: Deploy to Github Pages
 
 on:
   push:
     branches:
-      - main # Set a branch name to trigger deployment
+      - main
+
+  workflow_dispatch:
 
 jobs:
-  deploy:
+  deployment:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
+
+      - name: Setup Node
+        uses: actions/setup-node@v3
         with:
-          node-version: 18
-      - name: Install dependencies
-        run: npm ci
-      - name: Build website
-        run: npm run build
-      - name: Deploy to GitHub Pages
+          node-version: "lts/*"
+          cache: "npm"
+
+      - name: Build
+        run: |
+          npm i
+          npm run build
+          npm run export
+
+      - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          deploy_key: ${{ secrets.ACTIONS_DEPLOY_KEY }}
           publish_dir: ./out
