@@ -1,0 +1,21 @@
+# So, how the Relayer actually works?
+
+The Relayer is constantly connected to two sources of information:
+
+1. Tron blockchain, through gRPC API of its node;
+2. Untron Core, using ZKsync Era's JSON-RPC API.
+
+Both sources are used by the Relayer to fetch and compute over the data in the following way:
+
+1. The Relayer fetches the latest ZK proven Tron block ID and the corresponding action chain tip from the Core contract;
+2. The Relayer walks to deeper blocks to reconstruct the state which print is set up in the Core;
+3. After reconstructing the state, the Relayer fetches all actions and Tron blocks after the latest ZK proven ones and fetches new ones;
+4. Every Tron block, it executes a STF with new pending actions to update its local state copy. All locally executed blocks and actions are stored in the buffer;
+5. If the STF execution resulted in closed orders, the Relayer passes them to the Fulfiller thread;
+6. The Fulfiller thread calls `calculateFulfillerTotal` view function that returns the balance in USDT on ZKsync Era it must have, passing one order back in the buffer and re-calling the function until their balance is enough (if it wasn't enough since the first call);
+7. With the number returned by `calculateFulfillerTotal` function, the Fulfiller thread calls `fulfill` function with those orders to transfer the USDT to the order creators;
+8. After the buffer has reached the size specified in the configuration, the Relayer generates a ZK proof for the STF with the buffer as the input;
+9. The Relayer sends the ZK proof to the Core contract on ZKsync Era by calling `closeOrders` function;
+10. The Core contract verifies the ZK proof and the public inputs, and if everything is correct, it marks all orders in the public inputs as closed and the Relayer repeats the process from step 3.
+
+> **Warning:** Even though the situation of the Relayer's account not having enough USDT to fulfill orders is handled, the situation when the Relayer's ZKsync account doesn't have enough balance to pay for _the gas_ of the `closeOrders` and `fulfill` calls is _not handled_ and will cause things to go wrong.
