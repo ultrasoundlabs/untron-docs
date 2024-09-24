@@ -5,4 +5,7 @@ const withNextra = nextra({
   themeConfig: "./theme.config.jsx",
 });
 
-export default withNextra();
+export default withNextra({
+  basePath: "/untron-docs",
+  assetPrefix: "/untron-docs/",
+});
