@@ -21,7 +21,7 @@ const DynamicLogo = () => {
   return (
     <span style={{ display: 'flex', alignItems: 'center' }}>
       <Image 
-        src={currentTheme === 'dark' ? '/public/logo/white.png' : '/public/logo/black.png'} 
+        src={currentTheme === 'dark' ? '/untron-docs/logo/white.png' : '/untron-docs/logo/black.png'} 
         alt="Untron Logo" 
         width={128} 
         height={128} 
