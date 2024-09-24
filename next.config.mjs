@@ -8,4 +8,8 @@ const withNextra = nextra({
 export default withNextra({
   basePath: "/untron-docs",
   assetPrefix: "/untron-docs/",
+  images: {
+    unoptimized: true,
+  },
+  output: "export",
 });
