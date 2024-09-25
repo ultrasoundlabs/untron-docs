@@ -1,0 +1,45 @@
+# Untron from Contracts
+
+Here's an example of how to interact with Untron Core from Solidity smart contract deployed on ZKsync Era. In this example, we're creating a wrapper contract that allows its owner to manage orders on Untron, while keeping all collateral in the contract.
+
+> **Warning:** This code was not audited and must not be used in production.
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import {IUntronCore, Transfer} from "@ultrasoundlabs/untron/contracts/src/interfaces/IUntronCore.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+contract UntronWrapper is Ownable {
+    IUntronCore public untron;
+    IERC20 public usdt;
+
+    constructor(address _untron, address _usdt) Ownable(msg.sender) {
+        untron = IUntronCore(_untron);
+        usdt = IERC20(_usdt);
+    }
+
+    function createOrder(address provider, address receiver, uint256 size, uint256 rate, Transfer calldata transfer)
+        external onlyOwner {
+        uint256 collateral = untron.requiredCollateral();
+        require(usdt.balanceOf(address(this)) >= collateral, "Insufficient USDT balance");
+
+        usdt.approve(address(untron), collateral);
+        untron.createOrder(provider, receiver, size, rate, transfer);
+    }
+
+    function changeOrder(bytes32 orderId, Transfer calldata transfer) external onlyOwner {
+        untron.changeOrder(orderId, transfer);
+    }
+
+    function stopOrder(bytes32 orderId) external onlyOwner {
+        untron.stopOrder(orderId);
+    }
+
+    function withdrawCollateral() external {
+        usdt.transfer(owner(), usdt.balanceOf(address(this)));
+    }
+}
+```

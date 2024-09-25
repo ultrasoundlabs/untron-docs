@@ -1,0 +1,149 @@
+# Untron from Software
+
+Here's an example of how to create an order in Untron using Python and [Untron.finance API](/integrate/api). We'll use `zksync2-python` library, deriving from Web3.py, to interact with the smart contract. Instead of API, you can also host your own [Untron Indexer](https://github.com/ultrasoundlabs/untron-indexer).
+
+> **Warning:** This code was not audited and must not be used in production.
+
+```python
+from eth_account import Account
+from eth_account.signers.local import LocalAccount
+from web3.types import TxParams
+
+from zksync2.core.types import EthBlockParams
+from zksync2.module.module_builder import ZkSyncBuilder
+from zksync2.transaction.transaction_builders import TxFunctionCall
+
+import json
+import requests
+
+# Constants
+API_URL = "https://api.untron.finance/v1/best-provider"
+UNTRON_CORE_ADDRESS = "0x..."  # Replace with actual Untron Core contract address
+CHAIN_ID = 324  # ZKSync Era
+USDT_ADDRESS = "0x..."  # Replace with actual USDT contract address on ZKSync Era
+
+# Connect to ZKSync Era network
+zk_web3 = ZkSyncBuilder.build("https://mainnet.era.zksync.io")
+
+# Load the Untron Core contract ABI.
+# To generate it, you need to compile untron using foundry-zksync or other compilation tool.
+with open('untron/contracts/zkout/UntronCore.sol/UntronCore.json', 'r') as abi_file:
+    untron_core_abi = json.load(abi_file)
+
+# Create contract instances
+untron_core = Contract(UNTRON_CORE_ADDRESS, untron_core_abi)
+usdt_contract = zk_web3.eth.contract(address=USDT_ADDRESS, abi=ERC20_ABI)  # Assuming you have ERC20_ABI defined
+
+def get_best_provider(size):
+    """Get the best provider, receiver, and rate for the given order size."""
+    params = {
+        'size': size
+    }
+    response = requests.get(API_URL, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        return data['provider'], data['receiver'], data['rate']
+    else:
+        raise Exception(f"API request failed with status code {response.status_code}")
+
+def get_required_collateral():
+    """Get the required collateral amount from Untron Core."""
+    return untron_core.functions.requiredCollateral().call()
+
+def approve_erc20(account: LocalAccount, amount: int):
+    """Approve ERC20 token spending."""
+    nonce = zk_web3.zksync.get_transaction_count(
+        account.address, EthBlockParams.LATEST.value
+    )
+
+    approve_tx = usdt_contract.functions.approve(
+        UNTRON_CORE_ADDRESS,
+        amount
+    ).build_transaction({
+        'chainId': CHAIN_ID,
+        'nonce': nonce,
+        'from': account.address,
+        'gas': 0,  # Let the network estimate this
+        'gasPrice': zk_web3.zksync.gas_price
+    })
+
+    estimated_gas = zk_web3.zksync.eth_estimate_gas(approve_tx)
+    approve_tx['gas'] = estimated_gas
+
+    signed_tx = account.sign_transaction(approve_tx)
+    tx_hash = zk_web3.zksync.send_raw_transaction(signed_tx.rawTransaction)
+    tx_receipt = zk_web3.zksync.wait_for_transaction_receipt(
+        tx_hash, timeout=240, poll_latency=0.5
+    )
+
+    return tx_receipt
+
+def create_order(account: LocalAccount, size: int):
+    """Create an order in Untron Core."""
+    provider, receiver, rate = get_best_provider(size)
+
+    # Create Transfer struct.
+    # We're performing a simple swap to USDT on ZKsync, so most fields are empty.
+    transfer = {
+        'recipient': account.address,
+        'chainId': CHAIN_ID,
+        'acrossFee': 0,
+        'doSwap': False,
+        'outToken': '0x0000000000000000000000000000000000000000',
+        'minOutputPerUSDT': 0,
+        'fixedOutput': False,
+        'swapData': b''
+    }
+
+    nonce = zk_web3.zksync.get_transaction_count(
+        account.address, EthBlockParams.LATEST.value
+    )
+    calldata = untron_core.encode_method(fn_name="createOrder", args=[provider, receiver, rate, size, transfer])
+    eth_tx: TxParams = {
+        "from": account.address,
+        "to": untron_core.address,
+        "data": calldata,
+    }
+    eth_ret = zk_web3.zksync.call(eth_tx, EthBlockParams.LATEST.value)
+    result = int.from_bytes(eth_ret, "big", signed=True)
+    gas_price = zk_web3.zksync.gas_price
+
+    func_call = TxFunctionCall(
+        chain_id=CHAIN_ID,
+        nonce=nonce,
+        from_=account.address,
+        to=untron_core.address,
+        data=calldata,
+        gas_limit=0,
+        gas_price=gas_price,
+    )
+    estimate_gas = zk_web3.zksync.eth_estimate_gas(func_call.tx)
+
+    tx_712 = func_call.tx712(estimate_gas)
+
+    singed_message = account.sign_typed_data(tx_712.to_eip712_struct())
+    msg = tx_712.encode(singed_message)
+    tx_hash = zk_web3.zksync.send_raw_transaction(msg)
+    tx_receipt = zk_web3.zksync.wait_for_transaction_receipt(
+        tx_hash, timeout=240, poll_latency=0.5
+    )
+
+    return tx_receipt
+
+# Example usage
+private_key = "0x..."  # Replace with the actual private key
+account: LocalAccount = Account.from_key(private_key)
+order_size = 100_000_000 # 100 USDT Tron
+
+try:
+    # First, approve the USDT spending for collateral
+    required_collateral = get_required_collateral()
+    approve_receipt = approve_erc20(account, required_collateral)
+    print(f"ERC20 approval successful. Transaction hash: {approve_receipt['transactionHash'].hex()}")
+
+    # Then, create the order
+    receipt = create_order(account, order_size)
+    print(f"Order created successfully. Transaction hash: {receipt['transactionHash'].hex()}")
+except Exception as e:
+    print(f"Error creating order: {str(e)}")
+```

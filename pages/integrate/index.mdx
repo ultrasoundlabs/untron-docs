@@ -1,0 +1,169 @@
+# Integrate Untron
+
+Even though Untron as the project strives to be cross-chain friendly and work in the entire Ethereum ecosystem, Untron V1 (Core) is deployed on ZKsync Era L2 network. To power interaction from other L2s, Untron Core natively supports [Across](https://across.to) bridge.
+
+### Why deploy on a single L2?
+
+We believe that the only way to allow all Ethereum ecosystem users to have access to the best rates is to deploy on a single L2 network and integrate various interoperability protocols to power interaction from other L2s. When all liquidity is concentrated in a single L2, people from Base to Scroll to ZKsync can access the same rates.
+
+### Why ZKsync Era?
+
+We believe that ZK rollups and shared environments for validity L2s (Elastic Chain, AggLayer, etc.) will become the standard for Ethereum L2s, and ZKsync Era has advanced the most in this field. Deploying on ZKsync Era allows Untron to seamlessly interoperate with the entire Elastic Chain and minimize hurdles when interacting with other L2s outside it.
+
+In the long term, we're planning to build Untron V2—a (at this moment) concept of an intent-based exchange with USDT Tron that incorporates more Ethereum L1 logic. Untron V2 will replace V1, allow for even cheaper and faster swaps across more chains within the Ethereum ecosystem, and pave the way for automated static deposit addresses. More details about Untron V2 will be released in the future.
+
+## Preparing for integration
+
+Untron Core is deployed as a standalone contract on ZKsync Era. It means that all smart contracts on ZKsync Era can interact with Untron Core.
+
+### Core Deployments
+
+- Mainnet: [not deployed yet](https://explorer.zksync.io/address/)
+- Sepolia Testnet: [not deployed yet](https://explorer.zksync.io/address/)
+
+### Dependencies
+
+All smart contract and interface source code is available on our [GitHub](https://github.com/ultrasoundlabs/untron) repository:
+
+Forge: `forge install ultrasoundlabs/untron`
+
+Git Submodule: `git submodule add https://github.com/ultrasoundlabs/untron.git`
+
+...or just copy the [`/contracts/src/interfaces`](https://github.com/ultrasoundlabs/untron/tree/main/contracts/src/interfaces) folder into your project.
+
+### Interfaces
+
+In practice, you'll most likely interact with these functions from `IUntronCore.sol`:
+
+```solidity
+/// @notice Struct representing the liquidity provider in the Untron protocol
+struct Provider {
+    // provider's total liquidity in USDT L2
+    uint256 liquidity;
+    // provider's current rate in USDT L2 per 1 USDT Tron
+    uint256 rate;
+    // minimum order size in USDT Tron
+    uint256 minOrderSize;
+    // minimum deposit in USDT Tron
+    uint256 minDeposit;
+    // provider's Tron addresses to receive the USDT Tron from the order creators
+    address[] receivers;
+}
+
+function providers(address provider) external view returns (Provider memory);
+function isReceiverBusy(address receiver) external view returns (bytes32);
+
+function maxOrderSize() external view returns (uint256);
+function requiredCollateral() external view returns (uint256);
+
+
+/// @notice The order creation function
+/// @param provider The address of the liquidity provider owning the Tron receiver address.
+/// @param receiver The address of the Tron receiver address
+///                that's used to perform a USDT transfer on Tron.
+/// @param size The maximum size of the order in USDT L2.
+/// @param rate The "USDT L2 per 1 USDT Tron" rate of the order.
+/// @param transfer The transfer details.
+///                 They'll be used in the fulfill or closeOrders functions to send respective
+///                 USDT L2 to the order creator or convert them into whatever the order creator wants to receive
+///                 for their USDT Tron.
+function createOrder(address provider, address receiver, uint256 size, uint256 rate, Transfer calldata transfer)
+    external;
+
+/// @notice Changes the transfer details of an order.
+/// @param orderId The ID of the order to change.
+/// @param transfer The new transfer details.
+/// @dev The transfer details can only be changed before the order is fulfilled.
+function changeOrder(bytes32 orderId, Transfer calldata transfer) external;
+
+/// @notice Stops the order and returns the remaining liquidity to the provider.
+/// @param orderId The ID of the order to stop.
+/// @dev The order can only be stopped before it's fulfilled.
+///      Closing and stopping the order are different things.
+///      Closing means that provider's funds are unlocked to either the order creator or the provider
+///      as the order completed its listening cycle.
+///      Stopping means that the order no longer needs listening for new USDT Tron transfers
+///      and won't be fulfilled.
+function stopOrder(bytes32 orderId) external;
+
+/// @notice Sets the liquidity provider details.
+/// @param liquidity The liquidity of the provider in USDT L2.
+/// @param rate The rate (USDT L2 per 1 USDT Tron) of the provider.
+/// @param minOrderSize The minimum size of the order in USDT Tron.
+/// @param minDeposit The minimum amount the order creator can transfer to the receiver, in USDT Tron.
+///                   This is needed for so-called "reverse swaps", when the provider is
+///                   actually a normal order creator who wants to swap USDT L2 for USDT Tron,
+///                   and the order creator (who creates the orders) is an automated entity,
+///                   called "sender", that accepts such orders and performs transfers on Tron network.
+///                   order creators doing reverse swaps usually want to receive the entire order size
+///                   in a single transfer, hence the need for minDeposit.
+///                   minOrderSize == liquidity * rate signalizes for senders that the provider
+///                   is a order creator performing a reverse swap.
+/// @param receivers The provider's Tron addresses that are used to receive USDT Tron.
+///                  The more receivers the provider has, the more concurrent orders the provider can have.
+function setProvider(
+    uint256 liquidity,
+    uint256 rate,
+    uint256 minOrderSize,
+    uint256 minDeposit,
+    address[] calldata receivers
+) external;
+```
+
+And this struct from `IUntronTransfers.sol` (derived by `IUntronCore`):
+
+```solidity
+/// @notice Struct representing a transfer.
+struct Transfer {
+    // recipient of the transfer
+    address recipient;
+    // destination chain ID of the transfer.
+    // if not equal to the contract's chain ID, Across bridge will be used.
+    uint256 chainId;
+    // Across bridge fee. 0 in case of direct transfer.
+    uint256 acrossFee;
+    // whether to swap USDT to another token before sending to the recipient.
+    bool doSwap;
+    // address of the token to swap USDT to.
+    address outToken;
+    // minimum amount of output tokens to receive per 1 USDT L2.
+    uint256 minOutputPerUSDT;
+    // whether the minimum amount of output tokens is fixed.
+    // if true, the order creator will receive exactly minOutputPerUSDT * amount of output tokens.
+    // if false, the order creator will receive at least minOutputPerUSDT * amount of output tokens.
+    bool fixedOutput;
+    // data for the swap. Not used if doSwap is false.
+    bytes swapData;
+}
+```
+
+They're pretty nicely commented, but here's a quick summary:
+
+- `providers` is a mapping of providers. `Provider` struct contains a bunch of information we'll need to construct inputs for `createOrder`.
+- `maxOrderSize` is the maximum size of the order in USDT Tron. Unlike minimum order size unique to each provider, this is a protocol-enforced global limit for all providers.
+- `requiredCollateral` is the minimum amount of USDT ZKsync that must be approved to Core contract to create an order. These USDT will be temporarily locked in Core contract until the order is fulfilled or stopped.
+
+- `createOrder` is used to create an order. To construct its input, we have to find a provider that has enough liquidity for our order, and fetch some of the inputs from `providers` function. Then, we build a `Transfer` struct, specifying in what form we want to receive the USDT for the order.
+- `changeOrder` is used to change `Transfer` from not yet fulfilled order. This is needed in case there was large slippage from initial swap parameters, and current `Transfer` can't be fulfilled given amount of USDT ZKsync output from the order.
+- `stopOrder` is used to stop a not yet expired (5 minutes) order. This must only be used in case no USDT Tron was sent to the order receiver, because it removes information about the order from the state. After the receiver is claimed by some other order, the expired order is automatically stopped by the protocol, but its creator gets their collateral slashed. Therefore, you might want to stop orders before they expire, to avoid losing funds.
+
+- `setProvider` is used to set the liquidity provider details. You might need this to either provide liquidity for Untron, or implement intron (reversed) swaps to USDT Tron. Unlike `createOrder`, this function does not require collateral.
+
+We have built an open-source [Untron Indexer](https://github.com/ultrasoundlabs/untron-indexer) that indexes Untron Core and provides a local endpoint to find best rates at your order size. If you don't have an option or don't want to run your own indexer, you can use [Untron.finance's API](/integrate/api) that incorporates this indexer.
+
+### Transfer Struct
+
+`Transfer` struct is used to specify in what form we want to receive the USDT for the order. It has the following fields:
+
+- `recipient` is the address that will receive the funds for the order, sometimes referred to as an "order beneficiary".
+- `chainId` is the ID of the chain to which we want to send the USDT. If it's not equal to the chain ID of the contract (324 for Era Mainnet), Across bridge will be used. Therefore, this chain ID must either be equal to the host chain, or supported by Across.
+- `acrossFee` is the fee for Across bridge. It's 0 in case of transfer within ZKsync Era. You must fetch this value from Across API, but at the time of writing, Across takes 0.05% fee on L2->L2 USDT transfers.
+- `doSwap` is a flag whether we want to swap USDT to another token before sending to the recipient.
+- `outToken` is the address of the token to swap USDT to. In case Across is used, it must be supported by Across.
+- `minOutputPerUSDT` is the minimum amount of output tokens to receive per 1 USDT L2. This is used to set slippage for the swap.
+- `fixedOutput` is a flag whether the minimum amount of output tokens is fixed. If true, the order creator will receive from the fulfiller exactly `minOutputPerUSDT * amount of USDT L2` output tokens. If false, the order creator will receive at least this amount. If the order is fulfilled by a relayer (via `closeOrders`) and not by the fulfiller, this is automatically set to `false`.
+- `swapData` is a bytes field that is used to pass additional data for the swap. As Untron Core uses 1inch V6 Aggregator, you should construct this data from their API/SDK. If swaps are not used, this should be left empty.
+
+For more information about integrating Across, see [their docs](https://docs.across.to). 1inch V6 has a [Developer Portal](https://portal.1inch.dev/documentation/overview), where you can find more information about their API.
+
+If you'd like to integrate Untron into your project but your business workflow doesn't allow you to work with Core and create orders directly, [please reach out to us](/navigation#our-team). We can discuss a custom integration.
