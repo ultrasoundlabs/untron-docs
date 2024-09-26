@@ -8,13 +8,13 @@ Firstly, let's outline three main rules Untron relayer was built according to:
 - From this it follows that the Relayer must not be the source of trust—the worst thing it could do to the protocol is to go down and cause a liveness failure;
 - To minimize the risk of and the damage from a potential liveness failure, the Relayer must be permissionless and relatively simple to run.
 
-Simplifying, all the Relayer does is generating ZK proofs of the state transition function of Untron Protocol and sending them to the Core contract. This task is permissionless, and anyone can run the relayer, provided they can afford the cost of ZK proof generation.
+Simplifying, all the Relayer does is generate ZK proofs of the state transition function of Untron Protocol and sends them to the Core contract. This task is permissionless, and anyone can run the relayer, provided they can afford the cost of ZK proof generation.
 
 ## Relayers and Fulfillers
 
 Besides relaying, relayer-the-crate implements a _Fulfiller_. Fulfillers advance funds for orders that were already executed (sent USDT Tron for), but this fact was not yet ZK proven onchain. If some order was _fulfilled_, it means that its beneficiary (could be order creator, but not necessarily; see later) has already received its ask on the destination chain after sending USDT Tron, but the Core contract doesn't yet know they did send it. This is because one of the Fulfillers had sent the ask in advance, after seeing that the transfer did indeed happen on Tron blockchain.
 
-Fulfillers carry the risk of Tron blockchain's reorgs and wait for the ZK proof to get their funds back, in exchange for a small fee. Similarly to relaying tasks, fulfillers are not the source of trust, and the worst that can happen if there are no fulfillers live is that the users will receive their funds in about 30 minutes rather than a few seconds. Considering the Tron blockchain has never reorged in its entire history, this risk is negligible.
+Fulfillers carry the risk of Tron blockchain's reorgs and must wait for the ZK proof to be verified to get their funds back, in exchange for a small fee. Similarly to relaying tasks, fulfillers are not the source of trust, and the worst that can happen if there are no fulfillers live is that the users will receive their funds in about 30 minutes rather than a few seconds. Considering the Tron blockchain has never reorged in its entire history, this risk is negligible.
 
 ```mermaid
 flowchart TD
