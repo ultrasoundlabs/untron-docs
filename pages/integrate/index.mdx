@@ -147,7 +147,7 @@ They're pretty nicely commented, but here's a quick summary:
 - `changeOrder` is used to change `Transfer` from not yet fulfilled order. This is needed in case there was large slippage from initial swap parameters, and current `Transfer` can't be fulfilled given amount of USDT ZKsync output from the order.
 - `stopOrder` is used to stop a not yet expired (5 minutes) order. This must only be used in case no USDT Tron was sent to the order receiver, because it removes information about the order from the state. After the receiver is claimed by some other order, the expired order is automatically stopped by the protocol, but its creator gets their collateral slashed. Therefore, you might want to stop orders before they expire, to avoid losing funds.
 
-- `setProvider` is used to set the liquidity provider details. You might need this to either provide liquidity for Untron, or implement intron (reversed) swaps to USDT Tron. Unlike `createOrder`, this function does not require collateral.
+- `setProvider` is used to set the liquidity provider details. You might need this to either provide liquidity for Untron. Unlike `createOrder`, this function does not require collateral.
 
 We have built an open-source [Untron Indexer](https://github.com/ultrasoundlabs/untron-indexer) that indexes Untron Core and provides a local endpoint to find best rates at your order size. If you don't have an option or don't want to run your own indexer, you can use [Untron.finance's API](/integrate/api) that incorporates this indexer.
 

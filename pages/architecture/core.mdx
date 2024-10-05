@@ -246,46 +246,6 @@ flowchart TD
 
 ## Intron Swaps
 
-Besides so-called "untron swaps"—swaps from Tron to Ethereum ecosystem, Untron Core supports "intron swaps", the reverse. In the codebase's comments, they're sometimes referred to as "reversed swaps", since in them the user is actually a one-time liquidity provider that forces order creators to send the entire amount in a single USDT TRC20 transfer, and the order creators are automated entities, called "autocreators". This is how Untron can support two-way swaps with only one-way state verification.
+_TODO: In the first iteration of Untron, Untron V1 was used to perform swaps in both sides. We implemented Untron Intents, a second, multi-chain protocol in the Untron ecosystem, that significantly improved UX for intron swaps. However, its documentation is still in progress. If you want to learn more about them now, please reach out to us._
 
-> **Important:** Autocreators, unlike relayers and fulfillers, are not considered the part of the protocol. Therefore, the implementation of them is up to the users willing to participate as intron swap executors. Untron team is not responsible for any external implementations of out-protocol actors, but [does provide the PoC implementation of an autocreator in Python](https://github.com/ultrasoundlabs/untron/tree/main/autocreator). It's outside the scope of our audits and not suitable for production use.
-
-```solidity
-struct Provider {
-    // in USDT L2 (ZKsync Era)
-    uint256 liquidity;
-    // in USDT L2 (ZKsync Era) per 1 USDT TRC20
-    uint256 rate;
-    // in USDT TRC20
-    uint256 minOrderSize; // this is either manually set value or protocol-enforced one
-    // in USDT TRC20
-    uint256 minDeposit; // normally, this is 0. In intron swaps, this is equal to minOrderSize.
-    // Tron addresses to receive the USDT TRC20 from the order creators
-    address[] receivers;
-}
-```
-
-_(from [IUntronCore.sol](../contracts/src/interfaces/IUntronCore.sol); comments are changed to fit the context)_
-
-## How come "address"?
-
-You might have noticed that Untron's codebase utilizes `address` Solidity type, 20 bytes long, to store Tron addresses. This is not fundamentally wrong—Tron addresses are also last 20 bytes of a Keccak256 hash of a secp256k1 public key—but in the Tron protocol, all addresses are prefixed with `0x41` byte (which gives them T... prefix in Base58Check encoding). In our codebase, we don't use this prefix, so all Tron addresses are stored in 20-byte arrays or equivalent types. This was done for two main reasons:
-
-- Simpler integration of Untron with Ethereum-centric libraries;
-- Some projects use Ethereum-centric libraries (ethers, web3, etc.) for interaction with USDT TRC20 smart contract, as it uses `address` type too. Therefore, in transfer calldata, we can notice that some transfers insert 20-byte addresses, while some insert prefixed ones. This by default would lead to address mismatch (the same address could have 0x00... and 0x41... slots), and the necessary measures to prevent it would make the codebase less easy to understand.
-
-```
-transfer(address,uint256)
-CALLDATA:       NOTHING \/
-0xa9059cbb              [][  EVM ADDRESS; READ BY THE CONTRACT   ]
-0x000000000000000000000000deadbeef12345678bad455b00b5deadbeef12345
-0x0000000000000000000000000000000000000000000000000000000000000001
-```
-
-```
-transfer(address,uint256)
-CALLDATA:   TRON PREFIX \/ NOT USED BY THE CONTRACT
-0xa9059cbb              [][  EVM ADDRESS; READ BY THE CONTRACT   ]
-0x000000000000000000000041deadbeef12345678bad455b00b5deadbeef12345
-0x0000000000000000000000000000000000000000000000000000000000000001
-```
+![Untron Intents](/untron-intents.png)
